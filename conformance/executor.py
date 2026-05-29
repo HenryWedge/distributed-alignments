@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict
+from typing import Dict
 
+from utility.event import Event
+from . import Participant
+from .network import Network
 from .models import Alignment
-
-if TYPE_CHECKING:
-    from .network import Network
-    from .models import Event
 
 
 class Executor:
@@ -20,7 +19,7 @@ class Executor:
         self.case_event_count[event.case_id] = count
         log_index = count - 1
         participant_id = self.participant_mapping.get(event.activity)
-        participant = self.network.get_participant(participant_id, None)
+        participant: Participant = self.network.get_participant(participant_id, None)
         if participant is None:
             return Alignment([(None, "?") for _ in range(log_index + 1)])
         return participant.process_event(event, log_index)

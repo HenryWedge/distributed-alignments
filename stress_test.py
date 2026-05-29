@@ -4,11 +4,11 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from conformance import build_network, load_training_data, load_validation_trace
-from algo.utility.event_log_splitter import EventLogSplitter
+from utility.event_log_splitter import EventLogSplitter
 
 
 if __name__ == "__main__":
-    splitter = EventLogSplitter("../gt/test/datasets/Sepsis.xes", location_key="org:group")
+    splitter = EventLogSplitter("datasets/Sepsis.xes", location_key="org:group")
     total_cases = 100
 
     training_sequences, mapping = load_training_data(splitter, 10, c=False)

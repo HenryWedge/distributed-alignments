@@ -7,8 +7,9 @@ from .network import Network
 from .participant import Participant
 from .models import Entrypoint, Event
 from .executor import Executor
-from .strategies import QueryStrategy, CacheStrategy
-from algo.utility.event_log_splitter import EventLogSplitter
+from utility.event_log_splitter import EventLogSplitter
+from .strategy.cache.abstract_cache_strategy import CacheStrategy
+from .strategy.query.abstract_query_strategy import QueryStrategy
 
 
 def build_network(

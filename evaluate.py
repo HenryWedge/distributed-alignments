@@ -41,7 +41,7 @@ N_TEST = 100              # traces used for evaluation (first N_TEST after train
 
 EXPERIMENTS = [
     ("FullScan + InfiniteCache",    FullScanStrategy(), InfiniteCacheStrategy()),
-    ("ActivityFiltered(skip=inf)",  ActivityFilteredStrategy(10**9), InfiniteCacheStrategy()),
+    ("ActivityFiltered(skip=inf)",  ActivityFilteredStrategy(sys.maxsize), InfiniteCacheStrategy()),
     ("ActivityFiltered(skip=100)",  ActivityFilteredStrategy(100), InfiniteCacheStrategy()),
     ("ActivityFiltered(skip=10)",   ActivityFilteredStrategy(10), InfiniteCacheStrategy()),
     ("ActivityFiltered(skip=5)",    ActivityFilteredStrategy(5), InfiniteCacheStrategy()),
@@ -118,7 +118,7 @@ def run_experiment(name, query_strategy, cache_strategy,
         total_remote += inst_net.remote_calls
 
     final_states = sum(
-        len(p._p.decision_cache) for p in inst_net.participants.values()
+        len(p.participant.decision_cache) for p in inst_net.participants.values()
     )
     total_compute = sum(
         p.compute_calls for p in inst_net.participants.values()

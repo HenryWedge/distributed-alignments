@@ -50,13 +50,13 @@ class Alignment:
 
     @property
     def cost(self) -> int:
-        c = 0
-        for m, l in self._moves:
-            if m is None:
-                c += LOG_COST
-            elif l is None:
-                c += MODEL_COST
-        return c
+        cost = 0
+        for model, log in self._moves:
+            if model is None:
+                cost += LOG_COST
+            elif log is None:
+                cost += MODEL_COST
+        return cost
 
     def __str__(self) -> str:
         lines = []
