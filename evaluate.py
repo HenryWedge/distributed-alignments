@@ -1,55 +1,23 @@
-#!/usr/bin/env python3
-"""
-Evaluate strategy combinations on the Sepsis log.
-
-For each experiment a **fresh** optimal executor (FullScan+InfiniteCache) and
-a **fresh** heuristic executor are built from the same training data.  They
-process the test events **in lockstep** so both see identical cross-case cache
-states.  The per-alignment cost difference is the accuracy loss.
-
-Results are written to ``evaluation_results.csv``.
-"""
-
 import csv
 import sys
 import os
 import time
 
+from conformance import load_training_data, build_network, load_validation_trace
+from conformance.instrumentation_wrappers import instrument_network
+from conformance.strategies import InfiniteCacheStrategy, DepthLimitedCacheStrategy
+from conformance.strategy.query.full_query_strategy import FullScanStrategy
+from utility.event_log_splitter import EventLogSplitter
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from conformance import (
-    build_network,
-    load_training_data,
-    load_validation_trace,
-    FullScanStrategy,
-    InfiniteCacheStrategy,
-    ActivityFilteredStrategy,
-    TopKStrategy,
-    DepthLimitedCacheStrategy,
-)
-from conformance.wrappers import instrument_network
-from algo.utility.event_log_splitter import EventLogSplitter
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-DATA_PATH = "../gt/test/datasets/Sepsis.xes"
+DATA_PATH = "datasets/Sepsis.xes"
 LOCATION_KEY = "org:group"
-N_TRAINING = 100          # traces used to build the model
-N_TEST = 100              # traces used for evaluation (first N_TEST after training)
+N_TRAINING = 100
+N_TEST = 100
 
 EXPERIMENTS = [
     ("FullScan + InfiniteCache",    FullScanStrategy(), InfiniteCacheStrategy()),
-    ("ActivityFiltered(skip=inf)",  ActivityFilteredStrategy(sys.maxsize), InfiniteCacheStrategy()),
-    ("ActivityFiltered(skip=100)",  ActivityFilteredStrategy(100), InfiniteCacheStrategy()),
-    ("ActivityFiltered(skip=10)",   ActivityFilteredStrategy(10), InfiniteCacheStrategy()),
-    ("ActivityFiltered(skip=5)",    ActivityFilteredStrategy(5), InfiniteCacheStrategy()),
-    ("ActivityFiltered(skip=3)",    ActivityFilteredStrategy(3), InfiniteCacheStrategy()),
-    ("ActivityFiltered(skip=2)",    ActivityFilteredStrategy(2), InfiniteCacheStrategy()),
-    ("ActivityFiltered(skip=1)",    ActivityFilteredStrategy(1), InfiniteCacheStrategy()),
-    ("TopK(AF, 10)",                TopKStrategy(ActivityFilteredStrategy(), k=10), InfiniteCacheStrategy()),
-    ("TopK(AF, 1)",                 TopKStrategy(ActivityFilteredStrategy(), k=1), InfiniteCacheStrategy()),
     ("DepthLimited(d=3)",           FullScanStrategy(),
      DepthLimitedCacheStrategy(InfiniteCacheStrategy(), max_depth=3)),
     ("DepthLimited(d=5)",           FullScanStrategy(),
