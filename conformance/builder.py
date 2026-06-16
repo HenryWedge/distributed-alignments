@@ -30,6 +30,16 @@ def build_network(
             network.participants[participant_id].add_entrypoint(curr)
             prev = curr
 
+    # All participants must have a strategy that knows ALL participants.
+    # Since participants are created incrementally, each one's __init__
+    # only captures a partial snapshot. Re-initialize strategies here.
+    from .strategy.query.rank_predecessors_query_strategy import RankPredecessorsQueryStrategy
+    all_participants = list(network.participants.values())
+    for participant in all_participants:
+        participant.query_strategy = RankPredecessorsQueryStrategy(
+            all_participants, None
+        )
+
     executor = Executor(network, participant_mapping)
     return executor
 

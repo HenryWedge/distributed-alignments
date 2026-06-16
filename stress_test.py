@@ -120,3 +120,4 @@ if __name__ == "__main__":
         print(f"  {'Total cross-participant calls':<40s} {total_remote:>12d} {'N/A':>12s}")
         print(f"  {'Total states explored':<40s} {total_states:>12d} {total_states_c:>12d}")
         print(f"{sep}")
+    print("End")

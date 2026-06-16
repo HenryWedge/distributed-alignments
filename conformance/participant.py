@@ -7,6 +7,8 @@ from .constants import LOG_COST, MODEL_COST, MOVE_LOG, MOVE_MODEL, MOVE_SYNC
 from .models import Entrypoint, DecisionPath, Alignment, Event
 from .network import Network
 from .strategy.query.full_query_strategy import FullScanStrategy
+from .strategy.query.rank_predecessors_query_strategy import RankPredecessorsQueryStrategy
+
 
 class Participant:
     def __init__(
@@ -20,7 +22,8 @@ class Participant:
         self.decision_cache: Dict[Tuple, DecisionPath] = {}
         self.network = network
         self.local_events: Dict[Tuple[str, int], str] = {}
-        self.query_strategy = query_strategy if query_strategy is not None else FullScanStrategy()
+        #self.query_strategy = query_strategy if query_strategy is not None else FullScanStrategy()
+        self.query_strategy = RankPredecessorsQueryStrategy(list(self.network.participants.values()), None)
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
         return self.local_events.get((case_id, log_index))
@@ -40,6 +43,7 @@ class Participant:
                 best_participant = participant
                 best_entrypoint = entrypoint
 
+        self.query_strategy.update_predecessor(best_participant)
         if best_participant and best_entrypoint is not None:
             return best_participant.reconstruct_alignment(
                 best_entrypoint, log_index, event.case_id
@@ -50,6 +54,9 @@ class Participant:
 
     def add_entrypoint(self, entrypoint: Entrypoint):
         self.entrypoints.append(entrypoint)
+
+    def __lt__(self, other):
+        return True
 
     def request_predecessor_cost(
         self,
