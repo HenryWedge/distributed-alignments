@@ -1,18 +1,21 @@
 import sys
 import os
 
+from conformance.builder import load_training_data, build_network, load_validation_trace
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from conformance import build_network, load_training_data, load_validation_trace
 from utility.event_log_splitter import EventLogSplitter
 
 
 if __name__ == "__main__":
     splitter = EventLogSplitter("datasets/Sepsis.xes", location_key="org:group")
-    total_cases = 100
+    #splitter = EventLogSplitter("datasets/BPIC15_5.xes", location_key="org:resource")
+    total_cases = 500
+    training_cases = 10
 
-    training_sequences, mapping = load_training_data(splitter, 10, c=False)
-    training_sequences_c, mapping_c = load_training_data(splitter, 10, c=True)
+    training_sequences, mapping = load_training_data(splitter, training_cases, c=False)
+    training_sequences_c, mapping_c = load_training_data(splitter, training_cases, c=True)
     executor = build_network(training_sequences, mapping)
     executor_c = build_network(training_sequences_c, mapping_c)
 

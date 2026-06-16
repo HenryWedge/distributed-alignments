@@ -3,7 +3,7 @@ import sys
 import os
 import time
 
-from conformance import load_training_data, build_network, load_validation_trace
+from conformance.builder import load_validation_trace, load_training_data, build_network
 from conformance.instrumentation_wrappers import instrument_network
 from conformance.strategies import InfiniteCacheStrategy, DepthLimitedCacheStrategy
 from conformance.strategy.query.full_query_strategy import FullScanStrategy
@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 DATA_PATH = "datasets/Sepsis.xes"
 LOCATION_KEY = "org:group"
-N_TRAINING = 100
+N_TRAINING = 10000
 N_TEST = 100
 
 EXPERIMENTS = [
@@ -45,7 +45,6 @@ def run_experiment(name, query_strategy, cache_strategy,
     heur_exec = build_network(
         training_sequences, mapping,
         query_strategy=query_strategy,
-        cache_strategy=cache_strategy,
     )
     inst_net = instrument_network(heur_exec.network)
     heur_exec.network = inst_net

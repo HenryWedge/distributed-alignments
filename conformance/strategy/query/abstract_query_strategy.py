@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-from conformance import Network
-
+from conformance.network import Network
 
 class QueryStrategy(ABC):
 

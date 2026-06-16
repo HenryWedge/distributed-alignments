@@ -6,25 +6,14 @@ from typing import Dict, List, Tuple, Optional
 from .constants import LOG_COST, MODEL_COST, MOVE_LOG, MOVE_MODEL, MOVE_SYNC
 from .models import Entrypoint, DecisionPath, Alignment, Event
 from .network import Network
-from .strategies import InfiniteCacheStrategy
 from .strategy.query.full_query_strategy import FullScanStrategy
-
-
-def _compute_chain_depth(entrypoint: Optional[Entrypoint]) -> int:
-    depth = 0
-    while entrypoint is not None:
-        depth += 1
-        entrypoint = entrypoint.previous_entrypoint
-    return depth
-
 
 class Participant:
     def __init__(
         self,
         participant_id: str,
         network: Network,
-        query_strategy: 'Optional[QueryStrategy]' = None,
-        cache_strategy: 'Optional[CacheStrategy]' = None,
+        query_strategy: 'Optional[QueryStrategy]' = None
     ):
         self.id = participant_id
         self.entrypoints: List[Entrypoint] = []
@@ -32,38 +21,24 @@ class Participant:
         self.network = network
         self.local_events: Dict[Tuple[str, int], str] = {}
         self.query_strategy = query_strategy if query_strategy is not None else FullScanStrategy()
-        self.cache_strategy = cache_strategy if cache_strategy is not None else InfiniteCacheStrategy()
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
         return self.local_events.get((case_id, log_index))
 
     def process_event(self, event: Event, log_index: int) -> Alignment:
+        # TODO get rid of the index somehow
         self.local_events[(event.case_id, log_index)] = event.activity
-        self.network.record_local_event(self.id, event.case_id)
-        self.cache_strategy.on_event(log_index)
 
         best_cost = sys.maxsize
         best_participant = None
         best_entrypoint = None
 
-        ranked = self.query_strategy.rank_participants(
-            event.activity, log_index, event.case_id, self.network
-        )
-
-        for index, participant in enumerate(ranked):
-            if self.query_strategy.should_skip_participant(participant, best_cost):
-                continue
-
+        for index, participant in enumerate(self.network.participants.values()):
             cost, entrypoint = participant.compute_best_cost(log_index, event.case_id)
-            self.query_strategy.notify_computed(participant.id, event.case_id, cost)
-
             if cost < best_cost:
                 best_cost = cost
                 best_participant = participant
                 best_entrypoint = entrypoint
-
-            if self.query_strategy.should_stop_early(best_cost, ranked[index + 1:]):
-                break
 
         if best_participant and best_entrypoint is not None:
             return best_participant.reconstruct_alignment(
@@ -97,13 +72,6 @@ class Participant:
         if entrypoint is None:
             return LOG_COST * (log_index + 1)
 
-        max_depth = self.cache_strategy.max_predecessor_depth(entrypoint, log_index)
-        if max_depth > 0:
-            depth = _compute_chain_depth(entrypoint)
-            # REVIEW: Think about this. May be error prone
-            if depth > max_depth:
-                return LOG_COST * (log_index + 1) + MODEL_COST * (depth - max_depth)
-
         activity = self._get_activity_at(case_id, log_index)
         key = (entrypoint, log_index)
         if key in self.decision_cache:
@@ -130,7 +98,6 @@ class Participant:
 
         best_decision = min(possible_decision_paths)
         self.decision_cache[key] = best_decision
-        self.cache_strategy.after_insertion(self.decision_cache, key)
         return best_decision.cost
 
     def request_predecessor_alignment(

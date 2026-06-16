@@ -5,7 +5,6 @@ from typing import Dict, List
 class Network:
     def __init__(self):
         self.participants: 'Dict[str, Participant]' = {}
-        self.participant_event_counts: Dict[str, Dict[str, int]] = {}
         self.route_calls = 0
         self.remote_calls = 0
 
@@ -26,7 +25,3 @@ class Network:
         self.participants[participant.id] = participant
         participant.network = self
 
-    def record_local_event(self, participant_id: str, case_id: str):
-        self.participant_event_counts.setdefault(case_id, {})
-        self.participant_event_counts[case_id][participant_id] = \
-            self.participant_event_counts[case_id].get(participant_id, 0) + 1

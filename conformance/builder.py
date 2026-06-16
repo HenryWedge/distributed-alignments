@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 from typing import Dict, List, Optional
 
 from .network import Network
@@ -8,15 +7,12 @@ from .participant import Participant
 from .models import Entrypoint, Event
 from .executor import Executor
 from utility.event_log_splitter import EventLogSplitter
-from .strategy.cache.abstract_cache_strategy import CacheStrategy
 from .strategy.query.abstract_query_strategy import QueryStrategy
-
 
 def build_network(
     sequences: List[List[Event]],
     participant_mapping: Dict[str, str],
     query_strategy: Optional[QueryStrategy] = None,
-    cache_strategy: Optional[CacheStrategy] = None,
 ):
     network = Network()
     for seq in sequences:
@@ -27,8 +23,7 @@ def build_network(
                 network.register_participant(
                     Participant(
                         participant_id, network,
-                        query_strategy,
-                        copy.deepcopy(cache_strategy) if cache_strategy else None,
+                        query_strategy
                     )
                 )
             curr = Entrypoint(prev, event.activity, participant_id)
