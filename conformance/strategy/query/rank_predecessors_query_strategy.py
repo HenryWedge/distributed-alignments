@@ -23,16 +23,17 @@ class RankPredecessorsQueryStrategy:
             self.queue.append(entry)
         heapq.heapify(self.queue)
 
+    def has_next(self) -> bool:
+        return bool(self.queue) and (self.query_limit is None or self.returned_count < self.query_limit)
+
     def get_next_predecessor(self) -> 'Optional[Participant]':
-        if self.query_limit is not None and self.returned_count >= self.query_limit:
+        if not self.has_next():
             return None
-        while self.queue:
-            entry = heapq.heappop(self.queue)
-            if self.entry_map.get(entry.participant) is entry and -entry.priority == self.counts[entry.participant]:
-                del self.entry_map[entry.participant]
-                self.returned_count += 1
-                return entry.participant
-        return None
+
+        entry = heapq.heappop(self.queue)
+        del self.entry_map[entry.participant]
+        self.returned_count += 1
+        return entry.participant
 
     def update_predecessor(self, predecessor: 'Participant'):
         self.counts[predecessor] = self.counts.get(predecessor, 0) + 1
