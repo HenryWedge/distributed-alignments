@@ -44,6 +44,7 @@ class Participant:
             return best_participant.reconstruct_alignment(
                 best_entrypoint, log_index, event.case_id
             )
+
         return Alignment([(None, "?") for _ in range(log_index + 1)])
 
 
@@ -85,15 +86,15 @@ class Participant:
         )
 
         if activity is not None and activity == entrypoint.activity:
-            pre_cost = self.request_predecessor_cost(entrypoint.previous_entrypoint, log_index - 1, case_id)
+            pre_cost = self.request_predecessor_cost(entrypoint.previous_entrypoint, log_index-1, case_id)
             possible_decision_paths.append(
-                DecisionPath(pre_cost, MOVE_SYNC, entrypoint.previous_entrypoint, log_index - 1)
+                DecisionPath(pre_cost, MOVE_SYNC, entrypoint.previous_entrypoint, log_index-1)
             )
 
         if log_index >= 0:
-            pre_cost = self.request_predecessor_cost(entrypoint, log_index - 1, case_id)
+            pre_cost = self.request_predecessor_cost(entrypoint, log_index-1, case_id)
             possible_decision_paths.append(
-                DecisionPath(pre_cost + LOG_COST, MOVE_LOG, entrypoint, log_index - 1)
+                DecisionPath(pre_cost + LOG_COST, MOVE_LOG, entrypoint, log_index-1)
             )
 
         best_decision = min(possible_decision_paths)
