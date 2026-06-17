@@ -17,7 +17,6 @@ class Executor:
         count = self.case_event_count.get(event.case_id, 0) + 1
         self.case_event_count[event.case_id] = count
         log_index = count - 1
-        print(f"Activity: {event.activity}")
         participant_id = self.participant_mapping.get(event.activity)
         participant: Participant = self.network.get_participant(participant_id, None)
         if participant is None:

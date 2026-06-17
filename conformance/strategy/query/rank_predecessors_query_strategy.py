@@ -19,11 +19,13 @@ class RankPredecessorsQueryStrategy:
         self.counts: 'Dict[Participant, int]' = {}
         self.queue: 'List[Entry]' = []
         self.entry_map: 'Dict[Participant, Entry]' = {}
+        self._participant_map: 'Dict[str, Participant]' = {}
         for participant in initial_participants:
             self.counts[participant] = 0
             entry = Entry(0, participant)
             self.entry_map[participant] = entry
             self.queue.append(entry)
+            self._participant_map[participant.id] = participant
         heapq.heapify(self.queue)
 
     def has_next(self) -> bool:
@@ -50,6 +52,14 @@ class RankPredecessorsQueryStrategy:
             return entry.participant
 
         return None
+
+    def should_query_participant(self, participant_id: str) -> bool:
+        participant = self._participant_map.get(participant_id)
+        if participant is None:
+            return True
+        if self.warmup is None or self.warmup_counter < self.warmup or self.predecessor_count == 0:
+            return True
+        return self.counts.get(participant, 0) > 0
 
     def update_predecessor(self, predecessor: 'Participant'):
         old_count = self.counts.get(predecessor, 0)

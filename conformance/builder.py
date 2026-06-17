@@ -13,6 +13,7 @@ def build_network(
     sequences: List[List[Event]],
     participant_mapping: Dict[str, str],
     query_strategy: Optional[QueryStrategy] = None,
+    warmup: Optional[int] = 100,
 ):
     network = Network()
     for seq in sequences:
@@ -37,7 +38,7 @@ def build_network(
     all_participants = list(network.participants.values())
     for participant in all_participants:
         participant.query_strategy = RankPredecessorsQueryStrategy(
-            all_participants, None, 10
+            all_participants, None, warmup
         )
 
     executor = Executor(network, participant_mapping)

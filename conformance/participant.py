@@ -22,6 +22,8 @@ class Participant:
         self.network = network
         self.local_events: Dict[Tuple[str, int], str] = {}
         self.query_strategy = RankPredecessorsQueryStrategy(list(self.network.participants.values()), None, warmup=0)
+        self.compute_best_cost_calls = 0
+        self.participants_queried = 0
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
         return self.local_events.get((case_id, log_index))
@@ -33,15 +35,19 @@ class Participant:
         best_cost = sys.maxsize
         best_participant = None
         best_entrypoint = None
+        queried = 0
 
         self.query_strategy.reset()
         while self.query_strategy.has_next():
+            queried += 1
             participant = self.query_strategy.get_next_predecessor()
             cost, entrypoint = participant.compute_best_cost(log_index, event.case_id)
             if cost < best_cost:
                 best_cost = cost
                 best_participant = participant
                 best_entrypoint = entrypoint
+
+        self.participants_queried += queried
 
         if best_participant is not None:
             self.query_strategy.update_predecessor(best_participant)
@@ -154,6 +160,7 @@ class Participant:
         return align
 
     def compute_best_cost(self, log_index: int, case_id: str) -> Tuple[int, object]:
+        self.compute_best_cost_calls += 1
         best_cost = sys.maxsize
         best_entrypoint = None
         for entrypoint in self.entrypoints:
