@@ -14,6 +14,7 @@ def build_network(
     participant_mapping: Dict[str, str],
     query_strategy: Optional[QueryStrategy] = None,
     warmup: Optional[int] = 100,
+    max_depth: Optional[int] = None,
 ):
     network = Network()
     for seq in sequences:
@@ -24,7 +25,8 @@ def build_network(
                 network.register_participant(
                     Participant(
                         participant_id, network,
-                        query_strategy
+                        query_strategy,
+                        max_depth=max_depth,
                     )
                 )
             curr = Entrypoint(prev, event.activity, participant_id)

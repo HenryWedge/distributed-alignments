@@ -14,7 +14,8 @@ class Participant:
         self,
         participant_id: str,
         network: Network,
-        query_strategy: 'Optional[QueryStrategy]' = None
+        query_strategy: 'Optional[QueryStrategy]' = None,
+        max_depth: Optional[int] = None,
     ):
         self.id = participant_id
         self.entrypoints: List[Entrypoint] = []
@@ -22,6 +23,7 @@ class Participant:
         self.network = network
         self.local_events: Dict[Tuple[str, int], str] = {}
         self.query_strategy = RankPredecessorsQueryStrategy(list(self.network.participants.values()), None, warmup=0)
+        self.max_depth = max_depth
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
         return self.local_events.get((case_id, log_index))
@@ -63,12 +65,16 @@ class Participant:
         entrypoint: Entrypoint | None,
         log_index: int,
         case_id: str,
+        depth: int = 0,
     ) -> int:
         if entrypoint is None:
             return LOG_COST * (log_index + 1)
 
+        if self.max_depth is not None and depth >= self.max_depth:
+            return LOG_COST * (log_index + 1)
+
         return self.network.get_participant(entrypoint.participant_id, self.id).calculate_cost(
-            entrypoint, log_index, case_id
+            entrypoint, log_index, case_id, depth
         )
 
     def calculate_cost(
@@ -76,8 +82,12 @@ class Participant:
         entrypoint: Entrypoint | None,
         log_index: int,
         case_id: str,
+        depth: int = 0,
     ) -> int:
         if entrypoint is None:
+            return LOG_COST * (log_index + 1)
+
+        if self.max_depth is not None and depth > self.max_depth:
             return LOG_COST * (log_index + 1)
 
         activity = self._get_activity_at(case_id, log_index)
@@ -87,19 +97,19 @@ class Participant:
 
         possible_decision_paths = []
 
-        pre_cost = self.request_predecessor_cost(entrypoint.previous_entrypoint, log_index, case_id)
+        pre_cost = self.request_predecessor_cost(entrypoint.previous_entrypoint, log_index, case_id, depth + 1)
         possible_decision_paths.append(
             DecisionPath(pre_cost + MODEL_COST, MOVE_MODEL, entrypoint.previous_entrypoint, log_index)
         )
 
         if activity is not None and activity == entrypoint.activity:
-            pre_cost = self.request_predecessor_cost(entrypoint.previous_entrypoint, log_index-1, case_id)
+            pre_cost = self.request_predecessor_cost(entrypoint.previous_entrypoint, log_index-1, case_id, depth + 1)
             possible_decision_paths.append(
                 DecisionPath(pre_cost, MOVE_SYNC, entrypoint.previous_entrypoint, log_index-1)
             )
 
         if log_index >= 0:
-            pre_cost = self.request_predecessor_cost(entrypoint, log_index-1, case_id)
+            pre_cost = self.request_predecessor_cost(entrypoint, log_index-1, case_id, depth + 1)
             possible_decision_paths.append(
                 DecisionPath(pre_cost + LOG_COST, MOVE_LOG, entrypoint, log_index-1)
             )
@@ -113,12 +123,16 @@ class Participant:
         entrypoint: Entrypoint | None,
         log_index: int,
         case_id: str,
+        depth: int = 0,
     ) -> Alignment:
         if entrypoint is None:
             return Alignment([(None, "?") for _ in range(log_index + 1)])
 
+        if self.max_depth is not None and depth >= self.max_depth:
+            return Alignment([(None, "?") for _ in range(log_index + 1)])
+
         return self.network.get_participant(entrypoint.participant_id, self.id).reconstruct_alignment(
-            entrypoint, log_index, case_id
+            entrypoint, log_index, case_id, depth
         )
 
     def reconstruct_alignment(
@@ -126,20 +140,24 @@ class Participant:
         entrypoint: Entrypoint | None,
         log_index: int,
         case_id: str,
+        depth: int = 0,
     ) -> Alignment:
         if entrypoint is None:
             return Alignment([(None, "?") for _ in range(log_index + 1)])
 
+        if self.max_depth is not None and depth > self.max_depth:
+            return Alignment([(None, "?") for _ in range(log_index + 1)])
+
         key = (entrypoint, log_index)
         if key not in self.decision_cache:
-            self.calculate_cost(entrypoint, log_index, case_id)
+            self.calculate_cost(entrypoint, log_index, case_id, depth)
 
         decision = self.decision_cache[key]
         if decision.alignment is not None:
             return decision.alignment
 
         predecessor_alignment = self.request_predecessor_alignment(
-            decision.predecessor_entrypoint, decision.predecessor_log_index, case_id
+            decision.predecessor_entrypoint, decision.predecessor_log_index, case_id, depth + 1
         )
 
         if decision.move_type == MOVE_LOG:
@@ -153,11 +171,11 @@ class Participant:
         decision.alignment = align
         return align
 
-    def compute_best_cost(self, log_index: int, case_id: str) -> Tuple[int, object]:
+    def compute_best_cost(self, log_index: int, case_id: str, depth: int = 0) -> Tuple[int, object]:
         best_cost = sys.maxsize
         best_entrypoint = None
         for entrypoint in self.entrypoints:
-            cost = self.calculate_cost(entrypoint, log_index, case_id)
+            cost = self.calculate_cost(entrypoint, log_index, case_id, depth)
             if cost < best_cost:
                 best_cost = cost
                 best_entrypoint = entrypoint
