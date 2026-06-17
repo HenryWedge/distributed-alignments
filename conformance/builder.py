@@ -37,7 +37,7 @@ def build_network(
     all_participants = list(network.participants.values())
     for participant in all_participants:
         participant.query_strategy = RankPredecessorsQueryStrategy(
-            all_participants, None
+            all_participants, None, 10
         )
 
     executor = Executor(network, participant_mapping)

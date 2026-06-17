@@ -10,8 +10,11 @@ class Entry:
         return self.priority < other.priority
 
 class RankPredecessorsQueryStrategy:
-    def __init__(self, initial_participants: 'List[Participant]', query_limit: Optional[int] = None):
+    def __init__(self, initial_participants: 'List[Participant]', query_limit: Optional[int] = None, warmup: Optional[int] = None):
         self.query_limit = query_limit
+        self.warmup = warmup
+        self.warmup_counter = 0
+        self.predecessor_count = 0
         self.returned_count = 0
         self.counts: 'Dict[Participant, int]' = {}
         self.queue: 'List[Entry]' = []
@@ -24,19 +27,35 @@ class RankPredecessorsQueryStrategy:
         heapq.heapify(self.queue)
 
     def has_next(self) -> bool:
-        return bool(self.queue) and (self.query_limit is None or self.returned_count < self.query_limit)
+        if not self.queue or (self.query_limit is not None and self.returned_count >= self.query_limit):
+            return False
+        if self.warmup is None or self.warmup_counter < self.warmup or self.predecessor_count == 0:
+            return True
+        return any(self.counts[e.participant] > 0 for e in self.queue)
 
     def get_next_predecessor(self) -> 'Optional[Participant]':
-        if not self.has_next():
+        if self.query_limit is not None and self.returned_count >= self.query_limit:
             return None
 
-        entry = heapq.heappop(self.queue)
-        del self.entry_map[entry.participant]
-        self.returned_count += 1
-        return entry.participant
+        while self.queue:
+            entry = heapq.heappop(self.queue)
+            del self.entry_map[entry.participant]
+
+            if self.warmup is not None and self.warmup_counter >= self.warmup and self.predecessor_count > 0 and self.counts[entry.participant] == 0:
+                continue
+
+            self.returned_count += 1
+            if self.warmup is not None and self.warmup_counter < self.warmup:
+                self.warmup_counter += 1
+            return entry.participant
+
+        return None
 
     def update_predecessor(self, predecessor: 'Participant'):
-        self.counts[predecessor] = self.counts.get(predecessor, 0) + 1
+        old_count = self.counts.get(predecessor, 0)
+        self.counts[predecessor] = old_count + 1
+        if old_count == 0:
+            self.predecessor_count += 1
         if predecessor in self.entry_map:
             self.entry_map[predecessor].priority = -self.counts[predecessor]
             heapq.heapify(self.queue)
@@ -47,6 +66,7 @@ class RankPredecessorsQueryStrategy:
 
     def reset(self):
         self.returned_count = 0
+        self.warmup_counter = 0
         self.queue = []
         self.entry_map = {}
         for participant, count in self.counts.items():

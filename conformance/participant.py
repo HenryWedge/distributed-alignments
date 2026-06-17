@@ -21,7 +21,7 @@ class Participant:
         self.decision_cache: Dict[Tuple, DecisionPath] = {}
         self.network = network
         self.local_events: Dict[Tuple[str, int], str] = {}
-        self.query_strategy = RankPredecessorsQueryStrategy(list(self.network.participants.values()), None)
+        self.query_strategy = RankPredecessorsQueryStrategy(list(self.network.participants.values()), None, warmup=0)
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
         return self.local_events.get((case_id, log_index))
@@ -51,7 +51,6 @@ class Participant:
             )
 
         return Alignment([(None, "?") for _ in range(log_index + 1)])
-
 
     def add_entrypoint(self, entrypoint: Entrypoint):
         self.entrypoints.append(entrypoint)
