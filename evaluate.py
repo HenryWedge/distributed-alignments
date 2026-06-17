@@ -72,10 +72,10 @@ def run_experiment(
         len(p.participant.decision_cache) for p in inst_net.participants.values()
     )
     total_compute = sum(
-        p.participant.compute_best_cost_calls for p in inst_net.participants.values()
+        p.compute_calls for p in inst_net.participants.values()
     )
     total_queried = sum(
-        p.participant.participants_queried for p in inst_net.participants.values()
+        p.participant.query_strategy.total_queries for p in inst_net.participants.values()
     )
     # route/remote are already accumulated across all traces (no reset)
     total_route = inst_net.route_calls
