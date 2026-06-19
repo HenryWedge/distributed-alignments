@@ -19,7 +19,7 @@ class Network:
         return self.participants.get(participant_id, None)
 
     def get_total_states(self) -> int:
-        return sum(len(participant.decision_cache) for participant in self.participants.values())
+        return sum(len(participant.alignment_cache) for participant in self.participants.values())
 
     def register_participant(self, participant: 'Participant'):
         self.participants[participant.id] = participant

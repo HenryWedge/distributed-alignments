@@ -69,7 +69,7 @@ def run_experiment(
                 exact_count += 1
 
     final_states = sum(
-        len(p.participant.decision_cache) for p in inst_net.participants.values()
+        len(p.participant.alignment_cache) for p in inst_net.participants.values()
     )
     total_compute = sum(
         p.compute_calls for p in inst_net.participants.values()

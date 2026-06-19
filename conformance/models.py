@@ -1,7 +1,32 @@
 import hashlib
-from typing import Dict, List, Tuple, Optional
+import sys
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, Optional, TYPE_CHECKING
 
 from .constants import LOG_COST, MODEL_COST
+
+if TYPE_CHECKING:
+    from .participant import Participant
+
+
+@dataclass
+class AlignmentResult:
+    cost: int = sys.maxsize
+    entrypoint: Optional['Entrypoint'] = None
+    participant: Optional['Participant'] = None
+
+    @staticmethod
+    def max() -> 'AlignmentResult':
+        return AlignmentResult()
+
+    def is_valid(self) -> bool:
+        return self.participant is not None and self.entrypoint is not None
+
+    def __lt__(self, other: 'AlignmentResult') -> bool:
+        return self.cost < other.cost
+
+    def with_participant(self, participant: 'Participant') -> 'AlignmentResult':
+        return AlignmentResult(self.cost, self.entrypoint, participant)
 
 
 class Event:
