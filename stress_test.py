@@ -12,11 +12,11 @@ if __name__ == "__main__":
     splitter = EventLogSplitter("datasets/Sepsis.xes", location_key="org:group")
     #splitter = EventLogSplitter("datasets/BPIC15_5.xes", location_key="org:resource")
     total_cases = 500
-    training_cases = 10
+    training_cases = 1000
 
     training_sequences, mapping = load_training_data(splitter, training_cases, c=False)
     training_sequences_c, mapping_c = load_training_data(splitter, training_cases, c=True)
-    executor = build_network(training_sequences, mapping)
+    executor = build_network(training_sequences, mapping, max_depth=None)
     executor_c = build_network(training_sequences_c, mapping_c)
 
     print(f"Training traces: {len(training_sequences)}")
@@ -37,14 +37,9 @@ if __name__ == "__main__":
     for idx in range(total_cases):
         trace_events = load_validation_trace(splitter, idx, c=False)
         trace_events_c = load_validation_trace(splitter, idx, c=True)
-        if len(trace_events) < 2:
-            continue
 
         n_processed += 1
         case_id = f"case_{idx}"
-        print(f"Case Id: {case_id}")
-        if case_id == "case_499":
-            print("Stop")
         network = executor.network
         network_c = executor_c.network
 
