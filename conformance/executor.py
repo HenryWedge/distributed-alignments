@@ -20,6 +20,8 @@ class Executor:
         participant_id = self.participant_mapping.get(event.activity)
         participant: Participant = self.network.get_participant(participant_id, None)
         if participant is None:
-            # TODO: Here we need some extra logic to get the current alignment plus the skip of the unknown participant
-            return Alignment([(None, "?") for _ in range(log_index + 1)])
+            new_id = f"_unknown_{event.activity}"
+            participant = Participant(new_id, self.network, max_depth=None)
+            self.network.register_participant(participant)
+            self.participant_mapping[event.activity] = new_id
         return participant.process_event(event, log_index)

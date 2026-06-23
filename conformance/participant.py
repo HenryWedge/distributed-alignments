@@ -41,6 +41,27 @@ class Participant:
     def process_event(self, event: Event, log_index: int) -> Alignment:
         self.local_events[(event.case_id, log_index)] = event.activity
 
+        if not self.entrypoints:
+            if log_index == 0:
+                return Alignment([(None, event.activity)])
+
+            best_result = AlignmentResult.max()
+            for p in self.network.participants.values():
+                if p is self:
+                    continue
+                result = p.compute_best_cost(log_index - 1, event.case_id)
+                if result < best_result:
+                    best_result = result
+
+            if best_result.is_valid():
+                alignment = best_result.participant.reconstruct_alignment(
+                    best_result.entrypoint, log_index - 1, event.case_id
+                )
+            else:
+                alignment = Alignment()
+
+            return alignment.add_log_move(event.activity)
+
         best_alignment_result = AlignmentResult.max()
 
         self.query_strategy.reset()
