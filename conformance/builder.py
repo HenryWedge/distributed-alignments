@@ -16,6 +16,7 @@ def build_network(
     warmup: Optional[int] = 100,
     max_depth: Optional[int] = None,
     participant_cls: type = Participant,
+    top_p: float = 1.0,
 ):
     network = Network()
     for seq in sequences:
@@ -30,8 +31,15 @@ def build_network(
                         max_depth=max_depth,
                     )
                 )
-            curr = Entrypoint(prev, event.activity, participant_id)
-            network.participants[participant_id].add_entrypoint(curr)
+            participant = network.participants[participant_id]
+            candidate = Entrypoint(prev, event.activity, participant_id)
+            existing = [ep for ep in participant.entrypoints if ep.hash == candidate.hash]
+            if existing:
+                existing[0].frequency += 1
+                curr = existing[0]
+            else:
+                participant.add_entrypoint(candidate)
+                curr = candidate
             prev = curr
 
     # All participants must have a strategy that knows ALL participants.
@@ -39,9 +47,13 @@ def build_network(
     # only captures a partial snapshot. Re-initialize strategies here.
     from .strategy.query.rank_predecessors_query_strategy import RankPredecessorsQueryStrategy
     all_participants = list(network.participants.values())
+    participant_frequencies: Dict[str, int] = {}
+    for p in all_participants:
+        participant_frequencies[p.id] = sum(ep.frequency for ep in p.entrypoints)
     for participant in all_participants:
         participant.query_strategy = RankPredecessorsQueryStrategy(
-            all_participants, None, warmup
+            all_participants, None, warmup, top_p=top_p,
+            participant_frequencies=participant_frequencies,
         )
 
     executor = Executor(network, participant_mapping)

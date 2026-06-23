@@ -41,11 +41,12 @@ class Event:
 
 
 class Entrypoint:
-    def __init__(self, previous_entrypoint: 'Entrypoint | None', activity: str, participant_id: str):
+    def __init__(self, previous_entrypoint: 'Entrypoint | None', activity: str, participant_id: str, frequency: int = 1):
         self.previous_entrypoint = previous_entrypoint
         self.activity = activity
         self.participant_id = participant_id
         self.hash = self.compute_hash()
+        self.frequency = frequency
 
     def compute_hash(self) -> str:
         if self.previous_entrypoint is None:

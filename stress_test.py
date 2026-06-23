@@ -12,7 +12,7 @@ if __name__ == "__main__":
     splitter = EventLogSplitter("datasets/Sepsis.xes", location_key="org:group")
     #splitter = EventLogSplitter("datasets/BPIC15_5.xes", location_key="org:resource")
     total_cases = 500
-    training_cases = 1000
+    training_cases = 10
 
     training_sequences, mapping = load_training_data(splitter, training_cases, c=False)
     training_sequences_c, mapping_c = load_training_data(splitter, training_cases, c=True)
