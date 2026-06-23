@@ -15,6 +15,7 @@ def build_network(
     query_strategy: Optional[QueryStrategy] = None,
     warmup: Optional[int] = 100,
     max_depth: Optional[int] = None,
+    participant_cls: type = Participant,
 ):
     network = Network()
     for seq in sequences:
@@ -23,7 +24,7 @@ def build_network(
             participant_id = participant_mapping[event.activity]
             if participant_id not in network.participants:
                 network.register_participant(
-                    Participant(
+                    participant_cls(
                         participant_id, network,
                         query_strategy,
                         max_depth=max_depth,

@@ -42,6 +42,9 @@ if __name__ == "__main__":
 
         n_processed += 1
         case_id = f"case_{idx}"
+        print(f"Case Id: {case_id}")
+        if case_id == "case_499":
+            print("Stop")
         network = executor.network
         network_c = executor_c.network
 
@@ -49,18 +52,18 @@ if __name__ == "__main__":
         network_c.reset_stats()
 
         case_fail = None
-        for ei in range(len(trace_events)):
-            trace_events[ei].case_id = case_id
-            trace_events_c[ei].case_id = case_id
-            dec_align = executor.record_event(trace_events[ei])
-            cen_align = executor_c.record_event(trace_events_c[ei])
+        for event_index in range(len(trace_events)):
+            trace_events[event_index].case_id = case_id
+            trace_events_c[event_index].case_id = case_id
+            dec_align = executor.record_event(trace_events[event_index])
+            cen_align = executor_c.record_event(trace_events_c[event_index])
             print("-" * 40)
             print(dec_align)
             print("-" * 40)
             print(cen_align)
             print("-" * 40)
             if dec_align.cost != cen_align.cost:
-                case_fail = (ei, dec_align, cen_align)
+                case_fail = (event_index, dec_align, cen_align)
                 break
 
         total_route += network.route_calls
@@ -75,8 +78,8 @@ if __name__ == "__main__":
         sys.stdout.flush()
 
         if case_fail is not None:
-            ei, dec_align, cen_align = case_fail
-            first_fail = (idx, trace_events[:ei + 1], trace_events_c[:ei + 1], dec_align, cen_align)
+            event_index, dec_align, cen_align = case_fail
+            first_fail = (idx, trace_events[:event_index + 1], trace_events_c[:event_index + 1], dec_align, cen_align)
             print("\n\nMISMATCH FOUND!")
             break
 
