@@ -18,6 +18,7 @@ def build_network(
     participant_cls: type = Participant,
     top_p: float = 1.0,
     context_depth: int | None = None,
+    pruning: bool = True,
 ):
     network = Network()
     for seq in sequences:
@@ -30,6 +31,7 @@ def build_network(
                         participant_id, network,
                         query_strategy,
                         max_depth=max_depth,
+                        pruning=pruning,
                     )
                 )
             participant = network.participants[participant_id]
