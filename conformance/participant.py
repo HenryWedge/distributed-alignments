@@ -15,6 +15,7 @@ LOG_MOVE = 'log'
 class IndexedEntrypoint(NamedTuple):
     entrypoint: Entrypoint
     log_index: int
+    case_id: str
 
 
 class Participant:
@@ -100,8 +101,9 @@ class Participant:
             entrypoint: Entrypoint,
             log_index: int,
             predecessor_costs: Dict[str, int],
+            case_id: str = "",
     ) -> int:
-        key = IndexedEntrypoint(entrypoint, log_index)
+        key = IndexedEntrypoint(entrypoint, log_index, case_id)
         if key in self.alignment_cache:
             return self.alignment_cache[key].cost
 
@@ -151,8 +153,8 @@ class Participant:
         if entrypoint is None or self.is_max_depth_exceeded(depth):
             return LOG_COST * (log_index + 1)
 
-        if IndexedEntrypoint(entrypoint, log_index) in self.alignment_cache:
-            return self.alignment_cache[IndexedEntrypoint(entrypoint, log_index)].cost
+        if IndexedEntrypoint(entrypoint, log_index, case_id) in self.alignment_cache:
+            return self.alignment_cache[IndexedEntrypoint(entrypoint, log_index, case_id)].cost
 
         activity = self._get_activity_at(case_id, log_index)
 
@@ -166,7 +168,7 @@ class Participant:
             predecessor_cost[LOG_MOVE] = self.request_predecessor_cost(
                 entrypoint, log_index - 1, case_id, depth + 1)
 
-        return self._build_alignment(entrypoint, log_index, predecessor_cost)
+        return self._build_alignment(entrypoint, log_index, predecessor_cost, case_id)
 
     def calculate_costs(
         self,
@@ -200,7 +202,7 @@ class Participant:
         if entrypoint is None or self.is_max_depth_exceeded(depth):
             return Alignment([(None, "?") for _ in range(log_index + 1)])
 
-        key = IndexedEntrypoint(entrypoint, log_index)
+        key = IndexedEntrypoint(entrypoint, log_index, case_id)
         if key not in self.alignment_cache:
             self.calculate_cost(entrypoint, log_index, case_id, depth)
 
@@ -226,7 +228,7 @@ class Participant:
     def compute_best_cost(self, log_index: int, case_id: str, depth: int = 0) -> AlignmentResult:
         if not self.entrypoints:
             return AlignmentResult.max()
-        entries = [IndexedEntrypoint(ep, log_index) for ep in self.entrypoints]
+        entries = [(ep, log_index) for ep in self.entrypoints]
         costs = self.calculate_costs(entries, case_id, depth)
         best_idx = min(range(len(costs)), key=lambda i: costs[i])
         return AlignmentResult(costs[best_idx], self.entrypoints[best_idx])

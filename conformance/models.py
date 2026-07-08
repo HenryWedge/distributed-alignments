@@ -41,17 +41,26 @@ class Event:
 
 
 class Entrypoint:
-    def __init__(self, previous_entrypoint: 'Entrypoint | None', activity: str, participant_id: str, frequency: int = 1):
+    def __init__(self, previous_entrypoint: 'Entrypoint | None', activity: str, participant_id: str, frequency: int = 1, context_depth: int | None = None):
         self.previous_entrypoint = previous_entrypoint
         self.activity = activity
         self.participant_id = participant_id
-        self.hash = self.compute_hash()
+        self.depth = (previous_entrypoint.depth + 1) if previous_entrypoint else 0
+        self.hash = self.compute_hash(context_depth)
         self.frequency = frequency
 
-    def compute_hash(self) -> str:
-        if self.previous_entrypoint is None:
-            return hashlib.sha256(self.activity.encode()).hexdigest()
-        return hashlib.sha256((self.previous_entrypoint.hash + self.activity).encode()).hexdigest()
+    def compute_hash(self, context_depth: int | None = None) -> str:
+        if context_depth is None:
+            if self.previous_entrypoint is None:
+                return hashlib.sha256(self.activity.encode()).hexdigest()
+            return hashlib.sha256((self.previous_entrypoint.hash + self.activity).encode()).hexdigest()
+
+        acts: List[str] = []
+        cur = self
+        while cur is not None and len(acts) < context_depth:
+            acts.append(cur.activity)
+            cur = cur.previous_entrypoint
+        return hashlib.sha256("|".join(reversed(acts)).encode()).hexdigest()
 
 
 class DecisionPath:

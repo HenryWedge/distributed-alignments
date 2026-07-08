@@ -17,6 +17,7 @@ def build_network(
     max_depth: Optional[int] = None,
     participant_cls: type = Participant,
     top_p: float = 1.0,
+    context_depth: int | None = None,
 ):
     network = Network()
     for seq in sequences:
@@ -32,7 +33,7 @@ def build_network(
                     )
                 )
             participant = network.participants[participant_id]
-            candidate = Entrypoint(prev, event.activity, participant_id)
+            candidate = Entrypoint(prev, event.activity, participant_id, context_depth=context_depth)
             existing = [ep for ep in participant.entrypoints if ep.hash == candidate.hash]
             if existing:
                 existing[0].frequency += 1
@@ -74,7 +75,8 @@ def load_training_data(splitter: EventLogSplitter, n: int, c: bool):
                 occurrences[event.activity] = 1
             else:
                 occurrences[event.activity] += 1
-            activity_str = f"{event.activity}-{event.location}{occurrences[event.activity]}"
+            #activity_str = f"{event.activity}-{event.location}{occurrences[event.activity]}"
+            activity_str = f"{event.activity}"
             loc = "c" if c else event.location
             trace.append(Event(activity_str, case_id, loc, event.time))
             mapping[activity_str] = loc
@@ -94,7 +96,8 @@ def load_validation_trace(splitter: EventLogSplitter, record_index: int, c: bool
                 occurrences[event.activity] = 1
             else:
                 occurrences[event.activity] += 1
-            activity_str = f"{event.activity}-{event.location}{occurrences[event.activity]}"
+            #activity_str = f"{event.activity}-{event.location}{occurrences[event.activity]}"
+            activity_str = f"{event.activity}"
             loc = "c" if c else event.location
             trace.append(Event(activity_str, case_id, loc, event.time))
         return trace

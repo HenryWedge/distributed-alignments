@@ -7,6 +7,7 @@ from utility.event import Event
 
 from utility.event_log import EventLog
 
+
 class Converter:
     def to_event_log(self, event_log: Pm4PyEventLog, location_key=None) -> EventLog:
         el = EventLog()
@@ -16,9 +17,13 @@ class Converter:
                 if location_key not in event:
                     print(f"Location Key Missing {event["concept:name"]}")
                     continue
-                if el.has_event_in_case(trace._attributes["concept:name"], f"{event["concept:name"]}-{event[location_key]}{occurrence}"):
+                if el.has_event_in_case(
+                        trace._attributes["concept:name"],
+                        f"{event["concept:name"]}-{event[location_key]}{occurrence}"
+                ):
                     occurrence = occurrence + 1
-                el.add_event(self.to_event_location_aware(event, trace._attributes["concept:name"], location_key, occurrence))
+                el.add_event(
+                    self.to_event_location_aware(event, trace._attributes["concept:name"], location_key, occurrence))
         return el
 
     def to_event_location_aware(self, pm4py_event: Pm4PyEvent, case_id, location_key=None, occurrence="") -> Event:

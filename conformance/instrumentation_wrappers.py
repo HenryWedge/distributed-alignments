@@ -82,7 +82,10 @@ def instrument_network(network):
     for wrapped in all_wrapped:
         orig = wrapped.participant
         old = orig.query_strategy
-        new_strat = RankPredecessorsQueryStrategy(all_wrapped, old.query_limit, old.warmup)
+        new_strat = RankPredecessorsQueryStrategy(
+            all_wrapped, old.query_limit, old.warmup,
+            top_p=old.top_p, participant_frequencies=old.participant_frequencies,
+        )
         orig.query_strategy = InstrumentedQueryStrategy(new_strat)
 
     return inst_net

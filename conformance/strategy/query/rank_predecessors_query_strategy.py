@@ -20,6 +20,8 @@ class RankPredecessorsQueryStrategy:
     ):
         self.query_limit = query_limit
         self.warmup = warmup
+        self.top_p = top_p
+        self.participant_frequencies = participant_frequencies
         self.warmup_counter = 0
         self.predecessor_count = 0
         self.returned_count = 0
@@ -28,6 +30,7 @@ class RankPredecessorsQueryStrategy:
         self.entry_map: 'Dict[Participant, Entry]' = {}
         self._participant_map: 'Dict[str, Participant]' = {}
         self._top_p_set: Set[str] = set()
+        self._queue_filtered = False
 
         self._build_top_p(initial_participants, participant_frequencies, top_p)
 
@@ -62,12 +65,20 @@ class RankPredecessorsQueryStrategy:
             if cumulative >= threshold:
                 break
 
+    def _filter_queue(self):
+        self.queue = [e for e in self.queue if e.participant.id in self._top_p_set]
+        self.entry_map = {e.participant: e for e in self.queue}
+        heapq.heapify(self.queue)
+        self._queue_filtered = True
+
     def has_next(self) -> bool:
         if not self.queue or (self.query_limit is not None and self.returned_count >= self.query_limit):
             return False
         if self.warmup is None or self.warmup_counter < self.warmup or self.predecessor_count == 0:
             return True
-        return any(e.participant.id in self._top_p_set for e in self.queue)
+        if not self._queue_filtered:
+            self._filter_queue()
+        return bool(self.queue)
 
     def get_next_predecessor(self) -> 'Optional[Participant]':
         if self.query_limit is not None and self.returned_count >= self.query_limit:
@@ -76,10 +87,6 @@ class RankPredecessorsQueryStrategy:
         while self.queue:
             entry = heapq.heappop(self.queue)
             del self.entry_map[entry.participant]
-
-            if self.warmup is not None and self.warmup_counter >= self.warmup and self.predecessor_count > 0 and entry.participant.id not in self._top_p_set:
-                continue
-
             self.returned_count += 1
             if self.warmup is not None and self.warmup_counter < self.warmup:
                 self.warmup_counter += 1
@@ -97,6 +104,8 @@ class RankPredecessorsQueryStrategy:
         self.counts[predecessor] = old_count + 1
         if old_count == 0:
             self.predecessor_count += 1
+        if self.warmup is not None and self.warmup_counter >= self.warmup and self.predecessor_count > 0 and predecessor.id not in self._top_p_set:
+            return
         if predecessor in self.entry_map:
             self.entry_map[predecessor].priority = -self.counts[predecessor]
             heapq.heapify(self.queue)
@@ -108,6 +117,7 @@ class RankPredecessorsQueryStrategy:
     def reset(self):
         self.returned_count = 0
         self.warmup_counter = 0
+        self._queue_filtered = False
         self.queue = []
         self.entry_map = {}
         for participant, count in self.counts.items():
