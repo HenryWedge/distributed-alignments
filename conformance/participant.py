@@ -1,21 +1,15 @@
 from __future__ import annotations
 
 import sys
-from typing import Dict, List, Tuple, Optional, NamedTuple
+from typing import Dict, List, Tuple, Optional
 
 from .constants import LOG_COST, MODEL_COST, MOVE_LOG, MOVE_MODEL, MOVE_SYNC
 from .models import Entrypoint, DecisionPath, Alignment, AlignmentResult, Event
 from .network import Network
+from .predecessor_iterator import PredecessorIterator
+from .alignment_builder import AlignmentBuilder, IndexedEntrypoint, MODEL_MOVE, SYNC_MOVE, LOG_MOVE
+from .cost_candidate_list import CostCandidateList
 
-MODEL_MOVE = 'model'
-SYNC_MOVE = 'sync'
-LOG_MOVE = 'log'
-
-
-class IndexedEntrypoint(NamedTuple):
-    entrypoint: Entrypoint
-    log_index: int
-    case_id: str
 
 class Participant:
     def __init__(
@@ -37,8 +31,10 @@ class Participant:
         self.max_depth = max_depth
         self.pruning = pruning
         self.predecessor_threshold = predecessor_threshold
-        self._predecessor_ranking = predecessor_ranking
-        self._predecessor_map = predecessor_map
+        self._predecessors = PredecessorIterator(
+            participant_id, predecessor_ranking, predecessor_map, predecessor_threshold
+        )
+        self._alignment_builder = AlignmentBuilder()
         self._query_count = 0
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
@@ -54,14 +50,10 @@ class Participant:
         result = self.compute_best_cost(log_index, event.case_id).with_participant(self)
         if result < best_alignment_result:
             best_alignment_result = result
-        total_cumulated = 0.0
-        for participant_id, cumulated_frequency in self._predecessor_ranking:
-            if participant_id == self.id:
-                total_cumulated = cumulated_frequency
-                continue
-            if total_cumulated > self.predecessor_threshold:
-                break
-            total_cumulated = cumulated_frequency
+        self._predecessors.reset()
+
+        while self._predecessors.has_next():
+            participant_id = self._predecessors.next()
             participant = self.network.get_participant(participant_id, self.id)
             if participant is not None:
                 result = participant.compute_best_cost(log_index, event.case_id).with_participant(participant)
@@ -105,56 +97,9 @@ class Participant:
         if entrypoint is None:
             return LOG_COST * (log_index + 1)
 
-        if self._predecessor_map.get(entrypoint.participant_id, 1.0) >= self.predecessor_threshold:
-            return LOG_COST * (log_index + 1)
-
         return self.network.get_participant(entrypoint.participant_id, self.id).calculate_cost(
             entrypoint, log_index, case_id
         )
-
-    def _build_alignment(
-            self,
-            entrypoint: Entrypoint,
-            log_index: int,
-            predecessor_costs: Dict[str, int],
-            case_id: str = "",
-    ) -> int:
-        key = IndexedEntrypoint(entrypoint, log_index, case_id)
-        if key in self.alignment_cache:
-            return self.alignment_cache[key].cost
-
-        paths = []
-        if MODEL_MOVE in predecessor_costs:
-            paths.append(
-                DecisionPath(
-                    predecessor_costs[MODEL_MOVE] + MODEL_COST,
-                    MOVE_MODEL,
-                    entrypoint.previous_entrypoint,
-                    log_index
-                )
-            )
-        if SYNC_MOVE in predecessor_costs:
-            paths.append(
-                DecisionPath(
-                    predecessor_costs[SYNC_MOVE],
-                    MOVE_SYNC,
-                    entrypoint.previous_entrypoint,
-                    log_index - 1
-                )
-            )
-        if LOG_MOVE in predecessor_costs:
-            paths.append(
-                DecisionPath(
-                    predecessor_costs[LOG_MOVE] + LOG_COST,
-                    MOVE_LOG,
-                    entrypoint,
-                    log_index - 1
-                )
-            )
-
-        best = min(paths)
-        self.alignment_cache[key] = best
-        return best.cost
 
 
     def calculate_cost(
@@ -171,32 +116,14 @@ class Participant:
             return self.alignment_cache[key].cost
 
         activity = self._get_activity_at(case_id, log_index)
+        candidates = CostCandidateList(entrypoint, log_index, activity, self.pruning)
 
-        candidates = []
-        if activity is not None and activity == entrypoint.activity:
-            candidates.append((MOVE_SYNC, entrypoint.previous_entrypoint, log_index - 1, 0))
-        candidates.append((MOVE_MODEL, entrypoint.previous_entrypoint, log_index, MODEL_COST))
-        if log_index >= 0:
-            candidates.append((MOVE_LOG, entrypoint, log_index - 1, LOG_COST))
+        best = candidates.best(
+            lambda ep, li: self.request_predecessor_cost(ep, li, case_id)
+        )
 
-        move_type, predecessor_entrypoint, predecessor_log_index, add_cost = candidates[0]
-        predecessor_cost = self.request_predecessor_cost(predecessor_entrypoint, predecessor_log_index, case_id)
-        best_cost = predecessor_cost + add_cost
-        best_decision = DecisionPath(best_cost, move_type, predecessor_entrypoint, predecessor_log_index)
-
-        for move_type, predecessor_entrypoint, predecessor_log_index, add_cost in candidates[1:]:
-            if self.pruning and add_cost >= best_cost:
-                continue
-            predecessor_cost = self.request_predecessor_cost(predecessor_entrypoint, predecessor_log_index, case_id)
-            total = predecessor_cost + add_cost
-            if total < best_cost:
-                best_cost = total
-                best_decision = DecisionPath(total, move_type, predecessor_entrypoint, predecessor_log_index)
-                if self.pruning and best_cost == 0:
-                    break
-
-        self.alignment_cache[key] = best_decision
-        return best_cost
+        self.alignment_cache[key] = best
+        return best.cost
 
     def calculate_costs(
         self,
@@ -214,44 +141,12 @@ class Participant:
         if entrypoint is None:
             return Alignment([(None, "?") for _ in range(log_index + 1)])
 
-        if self._predecessor_map.get(entrypoint.participant_id, 1.0) > self.predecessor_threshold:
+        if self._predecessors.is_blocked(entrypoint.participant_id):
             return Alignment([(None, "?") for _ in range(log_index + 1)])
 
         return self.network.get_participant(entrypoint.participant_id, self.id).reconstruct_alignment(
             entrypoint, log_index, case_id
         )
-
-    def reconstruct_alignment(
-            self,
-            entrypoint: Entrypoint | None,
-            log_index: int,
-            case_id: str
-    ) -> Alignment:
-        if entrypoint is None:
-            return Alignment([(None, "?") for _ in range(log_index + 1)])
-
-        key = IndexedEntrypoint(entrypoint, log_index, case_id)
-        if key not in self.alignment_cache:
-            self.calculate_cost(entrypoint, log_index, case_id)
-
-        decision = self.alignment_cache[key]
-        if decision.alignment is not None:
-            return decision.alignment
-
-        predecessor_alignment = self.request_predecessor_alignment(
-            decision.predecessor_entrypoint, decision.predecessor_log_index, case_id
-        )
-
-        if decision.move_type == MOVE_LOG:
-            activity = self._get_activity_at(case_id, log_index)
-            align = predecessor_alignment.add_log_move(activity if activity is not None else "?")
-        elif decision.move_type == MOVE_MODEL:
-            align = predecessor_alignment.add_model_move(entrypoint.activity)
-        else:
-            align = predecessor_alignment.add_sync_move(entrypoint.activity)
-
-        decision.alignment = align
-        return align
 
     def compute_best_cost(self, log_index: int, case_id: str) -> AlignmentResult:
         if not self.entrypoints:
@@ -287,5 +182,34 @@ class Participant:
 
         return AlignmentResult(best_cost, best_ep)
 
+    def reconstruct_alignment(
+            self,
+            entrypoint: Entrypoint | None,
+            log_index: int,
+            case_id: str
+    ) -> Alignment:
+        if entrypoint is None:
+            return Alignment([(None, "?") for _ in range(log_index + 1)])
 
+        key = IndexedEntrypoint(entrypoint, log_index, case_id)
+        if key not in self.alignment_cache:
+            self.calculate_cost(entrypoint, log_index, case_id)
 
+        decision = self.alignment_cache[key]
+        if decision.alignment is not None:
+            return decision.alignment
+
+        predecessor_alignment = self.request_predecessor_alignment(
+            decision.predecessor_entrypoint, decision.predecessor_log_index, case_id
+        )
+
+        if decision.move_type == MOVE_LOG:
+            activity = self._get_activity_at(case_id, log_index)
+            align = predecessor_alignment.add_log_move(activity if activity is not None else "?")
+        elif decision.move_type == MOVE_MODEL:
+            align = predecessor_alignment.add_model_move(entrypoint.activity)
+        else:
+            align = predecessor_alignment.add_sync_move(entrypoint.activity)
+
+        decision.alignment = align
+        return align

@@ -9,9 +9,9 @@ from utility.event_log_splitter import EventLogSplitter
 
 
 if __name__ == "__main__":
-    #splitter = EventLogSplitter("datasets/Sepsis.xes", location_key="org:group")
+    splitter = EventLogSplitter("datasets/Sepsis.xes", location_key="org:group")
     #splitter = EventLogSplitter("datasets/Road_Traffic_Fine_Management_Process.xes", location_key="concept:name")
-    splitter = EventLogSplitter("datasets/MainProcess.xes", location_key="org:resource")
+    #splitter = EventLogSplitter("datasets/MainProcess.xes", location_key="org:resource")
     total_cases = 200
     training_cases = 10
 
