@@ -22,20 +22,23 @@ class Participant:
             self,
             participant_id: str,
             network: Network,
+            entrypoints: List[Entrypoint],
+            predecessor_ranking: List[Tuple[str, float]],
+            predecessor_map: Dict[str, float],
             max_depth: Optional[int] = None,
             pruning: bool = True,
             predecessor_threshold: float = 1.0,
     ):
         self.id = participant_id
-        self.entrypoints: List[Entrypoint] = []
+        self.entrypoints = entrypoints
         self.alignment_cache: Dict[Tuple, DecisionPath] = {}
         self.network = network
         self.local_events: Dict[Tuple[str, int], str] = {}
         self.max_depth = max_depth
         self.pruning = pruning
         self.predecessor_threshold = predecessor_threshold
-        self._predecessor_ranking: List[Tuple[str, float]] = []
-        self._predecessor_map: Dict[str, float] = {}
+        self._predecessor_ranking = predecessor_ranking
+        self._predecessor_map = predecessor_map
         self._query_count = 0
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
@@ -45,7 +48,7 @@ class Participant:
         self.local_events[(event.case_id, log_index)] = event.activity
 
         if not self.entrypoints:
-            return self._handle_no_entrypoint_available(event, log_index)
+            return self._align_unseen_entrypoint(event, log_index)
         best_alignment_result = AlignmentResult.max()
 
         result = self.compute_best_cost(log_index, event.case_id).with_participant(self)
@@ -72,7 +75,7 @@ class Participant:
 
         return Alignment([(None, "?") for _ in range(log_index + 1)])
 
-    def _handle_no_entrypoint_available(self, event: Event, log_index: int) -> Alignment:
+    def _align_unseen_entrypoint(self, event: Event, log_index: int) -> Alignment:
         if log_index == 0:
             return Alignment([(None, event.activity)])
 
@@ -284,38 +287,5 @@ class Participant:
 
         return AlignmentResult(best_cost, best_ep)
 
-    def add_entrypoint(self, entrypoint: Entrypoint):
-        self.entrypoints.append(entrypoint)
 
-    def build_predecessor_ranking(self):
-        counts: Dict[str, int] = {}
-        for ep in self.entrypoints:
-            if ep.previous_entrypoint is not None:
-                pid = ep.previous_entrypoint.participant_id
-                counts[pid] = counts.get(pid, 0) + ep.frequency
-
-        total_self = sum(ep.frequency for ep in self.entrypoints)
-        counts[self.id] = counts.get(self.id, 0) + total_self
-
-        for pid in self.network.participants:
-            if pid not in counts:
-                counts[pid] = 0
-
-        total = sum(counts.values())
-        if total == 0:
-            self._predecessor_ranking = [(pid, 1.0) for pid in counts]
-            self._predecessor_map = {pid: 0.0 for pid in counts}
-            return
-
-        sorted_pids = sorted(counts.items(), key=lambda x: -x[1])
-        cumulative = 0.0
-        ranking: List[Tuple[str, float]] = []
-        for pid, count in sorted_pids:
-            cum_before = cumulative
-            cumulative += count / total
-            if cumulative > 1.0:
-                cumulative = 1.0
-            ranking.append((pid, cumulative))
-            self._predecessor_map[pid] = cum_before
-        self._predecessor_ranking = ranking
 

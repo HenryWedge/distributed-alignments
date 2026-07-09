@@ -1,12 +1,51 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .network import Network
 from .participant import Participant
 from .models import Entrypoint, Event
 from .executor import Executor
 from utility.event_log_splitter import EventLogSplitter
+
+
+def _build_predecessor_ranking(
+    entrypoints: List[Entrypoint],
+    participant_id: str,
+    all_participant_ids: set,
+) -> Tuple[List[Tuple[str, float]], Dict[str, float]]:
+    counts: Dict[str, int] = {}
+    for ep in entrypoints:
+        if ep.previous_entrypoint is not None:
+            pid = ep.previous_entrypoint.participant_id
+            counts[pid] = counts.get(pid, 0) + ep.frequency
+
+    total_self = sum(ep.frequency for ep in entrypoints)
+    counts[participant_id] = counts.get(participant_id, 0) + total_self
+
+    for pid in all_participant_ids:
+        if pid not in counts:
+            counts[pid] = 0
+
+    total = sum(counts.values())
+    if total == 0:
+        ranking = [(pid, 1.0) for pid in counts]
+        pred_map = {pid: 0.0 for pid in counts}
+        return ranking, pred_map
+
+    sorted_pids = sorted(counts.items(), key=lambda x: -x[1])
+    cumulative = 0.0
+    ranking: List[Tuple[str, float]] = []
+    pred_map: Dict[str, float] = {}
+    for pid, count in sorted_pids:
+        cum_before = cumulative
+        cumulative += count / total
+        if cumulative > 1.0:
+            cumulative = 1.0
+        ranking.append((pid, cumulative))
+        pred_map[pid] = cum_before
+    return ranking, pred_map
+
 
 def build_network(
     sequences: List[List[Event]],
@@ -18,32 +57,34 @@ def build_network(
     predecessor_threshold: float = 1.0,
 ):
     network = Network()
+    participant_entrypoints: Dict[str, List[Entrypoint]] = {}
+
     for seq in sequences:
         prev = None
         for event in seq:
             participant_id = participant_mapping[event.activity]
-            if participant_id not in network.participants:
-                network.register_participant(
-                    participant_cls(
-                        participant_id, network,
-                        max_depth=max_depth,
-                        pruning=pruning,
-                        predecessor_threshold=predecessor_threshold,
-                    )
-                )
-            participant = network.participants[participant_id]
             candidate = Entrypoint(prev, event.activity, participant_id, context_depth=context_depth)
-            existing = [ep for ep in participant.entrypoints if ep.hash == candidate.hash]
+
+            existing = [ep for ep in participant_entrypoints.get(participant_id, []) if ep.hash == candidate.hash]
             if existing:
                 existing[0].frequency += 1
                 curr = existing[0]
             else:
-                participant.add_entrypoint(candidate)
+                participant_entrypoints.setdefault(participant_id, []).append(candidate)
                 curr = candidate
             prev = curr
 
-    for participant in network.participants.values():
-        participant.build_predecessor_ranking()
+    all_participant_ids = set(participant_entrypoints.keys())
+
+    for pid, entrypoints in participant_entrypoints.items():
+        ranking, pred_map = _build_predecessor_ranking(entrypoints, pid, all_participant_ids)
+        participant = participant_cls(
+            pid, network, entrypoints, ranking, pred_map,
+            max_depth=max_depth,
+            pruning=pruning,
+            predecessor_threshold=predecessor_threshold,
+        )
+        network.register_participant(participant)
 
     executor = Executor(network, participant_mapping)
     return executor

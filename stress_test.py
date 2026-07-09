@@ -9,11 +9,11 @@ from utility.event_log_splitter import EventLogSplitter
 
 
 if __name__ == "__main__":
-    splitter = EventLogSplitter("datasets/Sepsis.xes", location_key="org:group")
+    #splitter = EventLogSplitter("datasets/Sepsis.xes", location_key="org:group")
     #splitter = EventLogSplitter("datasets/Road_Traffic_Fine_Management_Process.xes", location_key="concept:name")
-    #splitter = EventLogSplitter("datasets/MainProcess.xes", location_key="org:resource")
+    splitter = EventLogSplitter("datasets/MainProcess.xes", location_key="org:resource")
     total_cases = 200
-    training_cases = 50
+    training_cases = 10
 
     training_sequences, mapping = load_training_data(splitter, training_cases, c=False)
     training_sequences_c, mapping_c = load_training_data(splitter, training_cases, c=True)
