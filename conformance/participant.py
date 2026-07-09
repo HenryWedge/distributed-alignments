@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from typing import Dict, List, Tuple, Optional, NamedTuple
 
 from .constants import LOG_COST, MODEL_COST, MOVE_LOG, MOVE_MODEL, MOVE_SYNC
@@ -44,42 +45,22 @@ class Participant:
         self.local_events[(event.case_id, log_index)] = event.activity
 
         if not self.entrypoints:
-            if log_index == 0:
-                return Alignment([(None, event.activity)])
-
-            best_result = AlignmentResult.max()
-            for p in self.network.participants.values():
-                if p is self:
-                    continue
-                result = p.compute_best_cost(log_index - 1, event.case_id)
-                if result < best_result:
-                    best_result = result
-
-            if best_result.is_valid():
-                alignment = best_result.participant.reconstruct_alignment(
-                    best_result.entrypoint, log_index - 1, event.case_id
-                )
-            else:
-                alignment = Alignment()
-
-            return alignment.add_log_move(event.activity)
+            return self._handle_no_entrypoint_available(event, log_index)
         best_alignment_result = AlignmentResult.max()
 
-        self._query_count += 1
         result = self.compute_best_cost(log_index, event.case_id).with_participant(self)
         if result < best_alignment_result:
             best_alignment_result = result
-        previous_cummulated = 0.0
+        total_cumulated = 0.0
         for participant_id, cumulated_frequency in self._predecessor_ranking:
             if participant_id == self.id:
-                previous_cummulated = cumulated_frequency
+                total_cumulated = cumulated_frequency
                 continue
-            if previous_cummulated > self.predecessor_threshold:
+            if total_cumulated > self.predecessor_threshold:
                 break
-            previous_cummulated = cumulated_frequency
+            total_cumulated = cumulated_frequency
             participant = self.network.get_participant(participant_id, self.id)
             if participant is not None:
-                self._query_count += 1
                 result = participant.compute_best_cost(log_index, event.case_id).with_participant(participant)
                 if result < best_alignment_result:
                     best_alignment_result = result
@@ -91,6 +72,27 @@ class Participant:
 
         return Alignment([(None, "?") for _ in range(log_index + 1)])
 
+    def _handle_no_entrypoint_available(self, event: Event, log_index: int) -> Alignment:
+        if log_index == 0:
+            return Alignment([(None, event.activity)])
+
+        best_result = AlignmentResult.max()
+        for participant in self.network.participants.values():
+            if participant is self:
+                continue
+            result = participant.compute_best_cost(log_index - 1, event.case_id)
+            if result < best_result:
+                best_result = result
+
+        if best_result.is_valid():
+            alignment = best_result.participant.reconstruct_alignment(
+                best_result.entrypoint, log_index - 1, event.case_id
+            )
+        else:
+            alignment = Alignment()
+
+        return alignment.add_log_move(event.activity)
+
     def request_predecessor_cost(
             self,
             entrypoint: Entrypoint | None,
@@ -100,7 +102,7 @@ class Participant:
         if entrypoint is None:
             return LOG_COST * (log_index + 1)
 
-        if self._predecessor_map.get(entrypoint.participant_id, 1.0) > self.predecessor_threshold:
+        if self._predecessor_map.get(entrypoint.participant_id, 1.0) >= self.predecessor_threshold:
             return LOG_COST * (log_index + 1)
 
         return self.network.get_participant(entrypoint.participant_id, self.id).calculate_cost(
@@ -253,7 +255,7 @@ class Participant:
             return AlignmentResult.max()
 
         if not self.pruning:
-            best_cost = 10**9
+            best_cost = sys.maxsize
             best_ep = None
             for ep in self.entrypoints:
                 cost = self.calculate_cost(ep, log_index, case_id)
@@ -311,6 +313,8 @@ class Participant:
         for pid, count in sorted_pids:
             cum_before = cumulative
             cumulative += count / total
+            if cumulative > 1.0:
+                cumulative = 1.0
             ranking.append((pid, cumulative))
             self._predecessor_map[pid] = cum_before
         self._predecessor_ranking = ranking
