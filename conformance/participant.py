@@ -38,10 +38,7 @@ class Participant:
         self._query_count = 0
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
-        activity = self.local_events.get((case_id, log_index))
-        if activity is not None:
-            return activity
-        return self.network.get_activity(case_id, log_index)
+        return self.local_events.get((case_id, log_index))
 
     def process_event(self, event: Event, log_index: int) -> Alignment:
         self.local_events[(event.case_id, log_index)] = event.activity

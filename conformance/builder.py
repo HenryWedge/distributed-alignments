@@ -64,7 +64,8 @@ def load_training_data(splitter: EventLogSplitter, n: int, c: bool):
             else:
                 occurrences[event.activity] += 1
             #activity_str = f"{event.activity}-{event.location}{occurrences[event.activity]}"
-            activity_str = f"{event.activity}-{event.location}"
+            #activity_str = f"{event.activity}-{event.location}"
+            activity_str = f"{event.activity}"
             loc = "c" if c else event.location
             trace.append(Event(activity_str, case_id, loc, event.time))
             mapping[activity_str] = loc
@@ -85,7 +86,8 @@ def load_validation_trace(splitter: EventLogSplitter, record_index: int, c: bool
             else:
                 occurrences[event.activity] += 1
             #activity_str = f"{event.activity}-{event.location}{occurrences[event.activity]}"
-            activity_str = f"{event.activity}-{event.location}"
+            #activity_str = f"{event.activity}-{event.location}"
+            activity_str = f"{event.activity}"
             loc = "c" if c else event.location
             trace.append(Event(activity_str, case_id, loc, event.time))
         return trace
