@@ -7,18 +7,15 @@ from .participant import Participant
 from .models import Entrypoint, Event
 from .executor import Executor
 from utility.event_log_splitter import EventLogSplitter
-from .strategy.query.abstract_query_strategy import QueryStrategy
 
 def build_network(
     sequences: List[List[Event]],
     participant_mapping: Dict[str, str],
-    query_strategy: Optional[QueryStrategy] = None,
-    warmup: Optional[int] = 100,
     max_depth: Optional[int] = None,
     participant_cls: type = Participant,
-    top_p: float = 1.0,
     context_depth: int | None = None,
     pruning: bool = True,
+    predecessor_threshold: float = 1.0,
 ):
     network = Network()
     for seq in sequences:
@@ -29,9 +26,9 @@ def build_network(
                 network.register_participant(
                     participant_cls(
                         participant_id, network,
-                        query_strategy,
                         max_depth=max_depth,
                         pruning=pruning,
+                        predecessor_threshold=predecessor_threshold,
                     )
                 )
             participant = network.participants[participant_id]
@@ -45,19 +42,8 @@ def build_network(
                 curr = candidate
             prev = curr
 
-    # All participants must have a strategy that knows ALL participants.
-    # Since participants are created incrementally, each one's __init__
-    # only captures a partial snapshot. Re-initialize strategies here.
-    from .strategy.query.rank_predecessors_query_strategy import RankPredecessorsQueryStrategy
-    all_participants = list(network.participants.values())
-    participant_frequencies: Dict[str, int] = {}
-    for p in all_participants:
-        participant_frequencies[p.id] = sum(ep.frequency for ep in p.entrypoints)
-    for participant in all_participants:
-        participant.query_strategy = RankPredecessorsQueryStrategy(
-            all_participants, None, warmup, top_p=top_p,
-            participant_frequencies=participant_frequencies,
-        )
+    for participant in network.participants.values():
+        participant.build_predecessor_ranking()
 
     executor = Executor(network, participant_mapping)
     return executor
@@ -78,7 +64,7 @@ def load_training_data(splitter: EventLogSplitter, n: int, c: bool):
             else:
                 occurrences[event.activity] += 1
             #activity_str = f"{event.activity}-{event.location}{occurrences[event.activity]}"
-            activity_str = f"{event.activity}"
+            activity_str = f"{event.activity}-{event.location}"
             loc = "c" if c else event.location
             trace.append(Event(activity_str, case_id, loc, event.time))
             mapping[activity_str] = loc
@@ -99,7 +85,7 @@ def load_validation_trace(splitter: EventLogSplitter, record_index: int, c: bool
             else:
                 occurrences[event.activity] += 1
             #activity_str = f"{event.activity}-{event.location}{occurrences[event.activity]}"
-            activity_str = f"{event.activity}"
+            activity_str = f"{event.activity}-{event.location}"
             loc = "c" if c else event.location
             trace.append(Event(activity_str, case_id, loc, event.time))
         return trace

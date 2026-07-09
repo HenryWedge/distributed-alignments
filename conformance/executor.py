@@ -21,7 +21,7 @@ class Executor:
         participant: Participant = self.network.get_participant(participant_id, None)
         if participant is None:
             new_id = f"_unknown_{event.activity}"
-            participant = Participant(new_id, self.network, max_depth=None)
+            participant = Participant(new_id, self.network, max_depth=None, predecessor_threshold=1.0)
             self.network.register_participant(participant)
             self.participant_mapping[event.activity] = new_id
         return participant.process_event(event, log_index)

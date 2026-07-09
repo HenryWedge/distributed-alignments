@@ -18,6 +18,13 @@ class Network:
             self.remote_calls += 1
         return self.participants.get(participant_id, None)
 
+    def get_activity(self, case_id: str, log_index: int) -> 'str | None':
+        for p in self.participants.values():
+            activity = p.local_events.get((case_id, log_index))
+            if activity is not None:
+                return activity
+        return None
+
     def get_total_states(self) -> int:
         return sum(len(participant.alignment_cache) for participant in self.participants.values())
 

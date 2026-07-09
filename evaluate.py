@@ -28,10 +28,9 @@ def run_experiment(
 
     # Build a centralized baseline (no warmup) for each test
     # to avoid cross-trace state leakage, build fresh on each experiment
-    central_exec = build_network(training_sequences_c, mapping_c, warmup=None)
+    central_exec = build_network(training_sequences_c, mapping_c)
 
-    # Build decentralized executor with the given warmup
-    dec_exec = build_network(training_sequences, mapping, warmup=warmup)
+    dec_exec = build_network(training_sequences, mapping)
     inst_net = instrument_network(dec_exec.network)
     dec_exec.network = inst_net
 
@@ -75,7 +74,7 @@ def run_experiment(
         p.compute_calls for p in inst_net.participants.values()
     )
     total_queried = sum(
-        p.participant.query_strategy.total_queries for p in inst_net.participants.values()
+        p.participant._query_count for p in inst_net.participants.values()
     )
     # route/remote are already accumulated across all traces (no reset)
     total_route = inst_net.route_calls
