@@ -35,6 +35,7 @@ class Participant:
         )
         self._alignment_builder = AlignmentBuilder()
         self._query_count = 0
+        self.calculate_cost_calls = 0
 
     def _get_activity_at(self, case_id: str, log_index: int) -> Optional[str]:
         return self.local_events.get((case_id, log_index))
@@ -46,25 +47,18 @@ class Participant:
             return self._align_unseen_entrypoint(event, log_index)
         best_alignment_result = AlignmentResult.max()
 
-        result = self.compute_best_cost(log_index, event.case_id).with_participant(self)
-        if result < best_alignment_result:
-            best_alignment_result = result
-        self.predecessor_iterator.reset()
-
-        while self.predecessor_iterator.has_next():
-            participant_id = self.predecessor_iterator.next()
-            participant = self.network.get_participant(participant_id, self.id)
-            if participant is not None:
-                result = participant.compute_best_cost(log_index, event.case_id).with_participant(participant)
-                if result < best_alignment_result:
-                    best_alignment_result = result
+        for participant in self.network.participants.values():
+            result = participant.compute_best_cost(log_index, event.case_id).with_participant(participant)
+            if result < best_alignment_result:
+                best_alignment_result = result
 
         if not best_alignment_result.is_valid():
             return Alignment([(None, "?") for _ in range(log_index + 1)])
-
         return best_alignment_result.participant.reconstruct_alignment(
             best_alignment_result.entrypoint, log_index, event.case_id
         )
+
+
 
     def _align_unseen_entrypoint(self, event: Event, log_index: int) -> Alignment:
         if log_index == 0:
@@ -88,12 +82,15 @@ class Participant:
         return alignment.add_log_move(event.activity)
 
     def request_predecessor_cost(
-            self,
-            entrypoint: Entrypoint | None,
-            log_index: int,
-            case_id: str
+        self,
+        entrypoint: Entrypoint | None,
+        log_index: int,
+        case_id: str
     ) -> int:
         if entrypoint is None:
+            return LOG_COST * (log_index + 1)
+
+        if self.predecessor_iterator.is_blocked(entrypoint.participant_id):
             return LOG_COST * (log_index + 1)
 
         return self.network.get_participant(entrypoint.participant_id, self.id).calculate_cost(
@@ -101,11 +98,12 @@ class Participant:
         )
 
     def calculate_cost(
-            self,
-            entrypoint: Entrypoint | None,
-            log_index: int,
-            case_id: str
+        self,
+        entrypoint: Entrypoint | None,
+        log_index: int,
+        case_id: str
     ) -> int:
+        self.calculate_cost_calls += 1
         if entrypoint is None:
             return LOG_COST * (log_index + 1)
 
@@ -116,10 +114,12 @@ class Participant:
         activity = self._get_activity_at(case_id, log_index)
         candidates = CostCandidateList(entrypoint, log_index, activity, self.pruning)
 
-        best = candidates.best(lambda entrypoint, log_index: self.request_predecessor_cost(entrypoint, log_index, case_id))
+        best = candidates.best(
+            lambda ep, log_index: self.request_predecessor_cost(ep, log_index, case_id)
+        )
+
         self.alignment_cache[key] = best
         return best.cost
-
 
     def compute_best_cost(self, log_index: int, case_id: str) -> AlignmentResult:
         if not self.entrypoints:
@@ -135,13 +135,14 @@ class Participant:
                     best_entrypoint = entrypoint
             return AlignmentResult(best_cost, best_entrypoint)
 
-        sorted_entrypoints = sorted(self.entrypoints, key=lambda ep: ep.frequency, reverse=True)
-        first_entrypoint = sorted_entrypoints[0]
+        sorted_entrypoint = sorted(self.entrypoints, key=lambda ep: ep.frequency, reverse=True)
+
+        first_entrypoint = sorted_entrypoint[0]
         best_cost = self.calculate_cost(first_entrypoint, log_index, case_id)
         best_entrypoint = first_entrypoint
 
         if best_cost > 0:
-            for entrypoint in sorted_entrypoints[1:]:
+            for entrypoint in sorted_entrypoint[1:]:
                 lower_bound = abs(entrypoint.depth - log_index)
                 if lower_bound >= best_cost:
                     continue
@@ -187,12 +188,15 @@ class Participant:
         return align
 
     def request_predecessor_alignment(
-            self,
-            entrypoint: Entrypoint | None,
-            log_index: int,
-            case_id: str
+        self,
+        entrypoint: Entrypoint | None,
+        log_index: int,
+        case_id: str
     ) -> Alignment:
         if entrypoint is None:
+            return Alignment([(None, "?") for _ in range(log_index + 1)])
+
+        if self.predecessor_iterator.is_blocked(entrypoint.participant_id):
             return Alignment([(None, "?") for _ in range(log_index + 1)])
 
         return self.network.get_participant(entrypoint.participant_id, self.id).reconstruct_alignment(

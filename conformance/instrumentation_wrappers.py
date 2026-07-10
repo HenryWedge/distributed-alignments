@@ -31,10 +31,6 @@ class InstrumentedParticipant:
         self.compute_calls += 1
         return self.participant.compute_best_cost(log_index, case_id)
 
-    def calculate_costs(self, entries, case_id, depth=0):
-        self.resolve_calls += 1
-        return self.participant.calculate_costs(entries, case_id, depth)
-
     def __getattr__(self, name):
         return getattr(self.participant, name)
 
