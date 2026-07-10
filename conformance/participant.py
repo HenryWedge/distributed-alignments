@@ -3,25 +3,25 @@ from __future__ import annotations
 import sys
 from typing import Dict, List, Tuple, Optional
 
-from .constants import LOG_COST, MODEL_COST, MOVE_LOG, MOVE_MODEL, MOVE_SYNC
+from .constants import LOG_COST, MOVE_LOG, MOVE_MODEL
 from .models import Entrypoint, DecisionPath, Alignment, AlignmentResult, Event
 from .network import Network
 from .predecessor_iterator import PredecessorIterator
-from .alignment_builder import AlignmentBuilder, IndexedEntrypoint, MODEL_MOVE, SYNC_MOVE, LOG_MOVE
+from .alignment_builder import AlignmentBuilder, IndexedEntrypoint
 from .cost_candidate_list import CostCandidateList
 
 
 class Participant:
     def __init__(
-            self,
-            participant_id: str,
-            network: Network,
-            entrypoints: List[Entrypoint],
-            predecessor_ranking: List[Tuple[str, float]],
-            predecessor_map: Dict[str, float],
-            max_depth: Optional[int] = None,
-            pruning: bool = True,
-            predecessor_threshold: float = 1.0,
+        self,
+        participant_id: str,
+        network: Network,
+        entrypoints: List[Entrypoint],
+        predecessor_ranking: List[Tuple[str, float]],
+        predecessor_map: Dict[str, float],
+        max_depth: Optional[int] = None,
+        pruning: bool = True,
+        predecessor_threshold: float = 1.0,
     ):
         self.id = participant_id
         self.entrypoints = entrypoints
@@ -30,8 +30,7 @@ class Participant:
         self.local_events: Dict[Tuple[str, int], str] = {}
         self.max_depth = max_depth
         self.pruning = pruning
-        self.predecessor_threshold = predecessor_threshold
-        self._predecessors = PredecessorIterator(
+        self.predecessor_iterator = PredecessorIterator(
             participant_id, predecessor_ranking, predecessor_map, predecessor_threshold
         )
         self._alignment_builder = AlignmentBuilder()
@@ -50,22 +49,22 @@ class Participant:
         result = self.compute_best_cost(log_index, event.case_id).with_participant(self)
         if result < best_alignment_result:
             best_alignment_result = result
-        self._predecessors.reset()
+        self.predecessor_iterator.reset()
 
-        while self._predecessors.has_next():
-            participant_id = self._predecessors.next()
+        while self.predecessor_iterator.has_next():
+            participant_id = self.predecessor_iterator.next()
             participant = self.network.get_participant(participant_id, self.id)
             if participant is not None:
                 result = participant.compute_best_cost(log_index, event.case_id).with_participant(participant)
                 if result < best_alignment_result:
                     best_alignment_result = result
 
-        if best_alignment_result.is_valid():
-            return best_alignment_result.participant.reconstruct_alignment(
-                best_alignment_result.entrypoint, log_index, event.case_id
-            )
+        if not best_alignment_result.is_valid():
+            return Alignment([(None, "?") for _ in range(log_index + 1)])
 
-        return Alignment([(None, "?") for _ in range(log_index + 1)])
+        return best_alignment_result.participant.reconstruct_alignment(
+            best_alignment_result.entrypoint, log_index, event.case_id
+        )
 
     def _align_unseen_entrypoint(self, event: Event, log_index: int) -> Alignment:
         if log_index == 0:
@@ -101,7 +100,6 @@ class Participant:
             entrypoint, log_index, case_id
         )
 
-
     def calculate_cost(
             self,
             entrypoint: Entrypoint | None,
@@ -118,35 +116,10 @@ class Participant:
         activity = self._get_activity_at(case_id, log_index)
         candidates = CostCandidateList(entrypoint, log_index, activity, self.pruning)
 
-        best = candidates.best(
-            lambda ep, li: self.request_predecessor_cost(ep, li, case_id)
-        )
-
+        best = candidates.best(lambda entrypoint, log_index: self.request_predecessor_cost(entrypoint, log_index, case_id))
         self.alignment_cache[key] = best
         return best.cost
 
-    def calculate_costs(
-        self,
-        entries: List[Tuple[Entrypoint | None, int]],
-        case_id: str
-    ) -> List[int]:
-        return [self.calculate_cost(entrypoint, log_index, case_id) for entrypoint, log_index in entries]
-
-    def request_predecessor_alignment(
-            self,
-            entrypoint: Entrypoint | None,
-            log_index: int,
-            case_id: str
-    ) -> Alignment:
-        if entrypoint is None:
-            return Alignment([(None, "?") for _ in range(log_index + 1)])
-
-        if self._predecessors.is_blocked(entrypoint.participant_id):
-            return Alignment([(None, "?") for _ in range(log_index + 1)])
-
-        return self.network.get_participant(entrypoint.participant_id, self.id).reconstruct_alignment(
-            entrypoint, log_index, case_id
-        )
 
     def compute_best_cost(self, log_index: int, case_id: str) -> AlignmentResult:
         if not self.entrypoints:
@@ -154,33 +127,32 @@ class Participant:
 
         if not self.pruning:
             best_cost = sys.maxsize
-            best_ep = None
-            for ep in self.entrypoints:
-                cost = self.calculate_cost(ep, log_index, case_id)
+            best_entrypoint = None
+            for entrypoint in self.entrypoints:
+                cost = self.calculate_cost(entrypoint, log_index, case_id)
                 if cost < best_cost:
                     best_cost = cost
-                    best_ep = ep
-            return AlignmentResult(best_cost, best_ep)
+                    best_entrypoint = entrypoint
+            return AlignmentResult(best_cost, best_entrypoint)
 
-        sorted_eps = sorted(self.entrypoints, key=lambda ep: -ep.frequency)
-
-        first_ep = sorted_eps[0]
-        best_cost = self.calculate_cost(first_ep, log_index, case_id)
-        best_ep = first_ep
+        sorted_entrypoints = sorted(self.entrypoints, key=lambda ep: ep.frequency, reverse=True)
+        first_entrypoint = sorted_entrypoints[0]
+        best_cost = self.calculate_cost(first_entrypoint, log_index, case_id)
+        best_entrypoint = first_entrypoint
 
         if best_cost > 0:
-            for ep in sorted_eps[1:]:
-                lb = abs(ep.depth - log_index)
-                if lb >= best_cost:
+            for entrypoint in sorted_entrypoints[1:]:
+                lower_bound = abs(entrypoint.depth - log_index)
+                if lower_bound >= best_cost:
                     continue
-                cost = self.calculate_cost(ep, log_index, case_id)
+                cost = self.calculate_cost(entrypoint, log_index, case_id)
                 if cost < best_cost:
                     best_cost = cost
-                    best_ep = ep
+                    best_entrypoint = entrypoint
                     if best_cost == 0:
                         break
 
-        return AlignmentResult(best_cost, best_ep)
+        return AlignmentResult(best_cost, best_entrypoint)
 
     def reconstruct_alignment(
             self,
@@ -213,3 +185,16 @@ class Participant:
 
         decision.alignment = align
         return align
+
+    def request_predecessor_alignment(
+            self,
+            entrypoint: Entrypoint | None,
+            log_index: int,
+            case_id: str
+    ) -> Alignment:
+        if entrypoint is None:
+            return Alignment([(None, "?") for _ in range(log_index + 1)])
+
+        return self.network.get_participant(entrypoint.participant_id, self.id).reconstruct_alignment(
+            entrypoint, log_index, case_id
+        )
