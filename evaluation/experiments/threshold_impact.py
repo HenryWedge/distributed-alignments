@@ -1,6 +1,7 @@
-from evaluation.base import Evaluator, write_csv, print_results_table
+
 from evaluation.config import DATASETS, RESULTS_DIR, DEFAULT_FIXED, STANDARD_METRICS as METRICS, DEFAULT_N_TRAINING, \
     DEFAULT_N_TEST
+from evaluation.evaluator import Evaluator, write_csv, print_results_table
 from evaluation.plots.plotter import generate_plots
 from utility.event_log_splitter import EventLogSplitter
 import os

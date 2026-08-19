@@ -29,7 +29,7 @@ class InstrumentedParticipant:
 
     def compute_best_cost(self, log_index, case_id):
         self.compute_calls += 1
-        return self.participant.compute_best_cost(log_index, case_id)
+        return self.participant.compute_minimal_alignment_cost(log_index, case_id)
 
     def __getattr__(self, name):
         return getattr(self.participant, name)
